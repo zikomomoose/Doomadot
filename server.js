@@ -230,7 +230,10 @@ async function fetchRssItems(url) {
   const xml=await r.text();
   const decode=s=>s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>');
   const items=[...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map(m=>{const b=m[1];const get=t=>decode((b.match(new RegExp(`<${t}[^>]*>([\s\S]*?)<\/${t}>`,'i'))||[])[1]||'').trim();return {title:get('title'),link:get('link'),description:get('description')};}).filter(x=>x.title&&x.link);
-  if(!items.length) throw new Error(`RSS returned 0 items (content-type: ${r.headers.get("content-type")}, body starts: ${xml.slice(0,120).replace(/\s+/g,' ')})`);
+  if(!items.length){
+    const itemTagCount=(xml.match(/<item>/gi)||[]).length;
+    throw new Error(`RSS returned 0 usable items (raw <item> tags found: ${itemTagCount}, body length: ${xml.length}, snippet: ${xml.slice(0,500).replace(/\s+/g,' ')})`);
+  }
   return items;
 }
 const FEEDS = [
