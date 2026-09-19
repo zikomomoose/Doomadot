@@ -229,10 +229,12 @@ async function fetchRssItems(url) {
   if(!r.ok) throw new Error(`RSS ${r.status}`);
   const xml=await r.text();
   const decode=s=>s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>');
-  const items=[...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map(m=>{const b=m[1];const get=t=>decode((b.match(new RegExp(`<${t}[^>]*>([\s\S]*?)<\/${t}>`,'i'))||[])[1]||'').trim();return {title:get('title'),link:get('link'),description:get('description')};}).filter(x=>x.title&&x.link);
+  const rawBlocks=[...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)];
+  const items=rawBlocks.map(m=>{const b=m[1];const get=t=>decode((b.match(new RegExp(`<${t}[^>]*>([\s\S]*?)<\/${t}>`,'i'))||[])[1]||'').trim();return {title:get('title'),link:get('link'),description:get('description')};}).filter(x=>x.title&&x.link);
   if(!items.length){
     const itemTagCount=(xml.match(/<item>/gi)||[]).length;
-    throw new Error(`RSS returned 0 usable items (raw <item> tags found: ${itemTagCount}, body length: ${xml.length}, snippet: ${xml.slice(0,500).replace(/\s+/g,' ')})`);
+    const firstBlock=rawBlocks[0]?rawBlocks[0][1].slice(0,400):"(no block matched by <item>...</item>)";
+    throw new Error(`RSS returned 0 usable items (raw <item> tags: ${itemTagCount}, matchAll blocks: ${rawBlocks.length}, first block: ${firstBlock.replace(/\s+/g,' ')})`);
   }
   return items;
 }
