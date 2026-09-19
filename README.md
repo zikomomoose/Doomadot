@@ -88,18 +88,20 @@ Dumadot stores local data in `linkedin-agent.db` (or `DB_PATH` if set). Do not d
 
 The ZIP does not include `.env` or `linkedin-agent.db`.
 
-## Deploying (Railway)
+## Deploying (Render, free tier)
 
-Dumadot is a stateful Node process (SQLite file + an in-memory `setInterval` scheduler for auto-publishing), so it needs a host that keeps a process running with a persistent disk — not a static-site/serverless platform like Netlify or Vercel. Railway fits with no code changes beyond `DB_PATH` above:
+Dumadot is a stateful Node process (SQLite file + an in-memory `setInterval` scheduler for auto-publishing), so it needs a host that keeps a process running — not a static-site/serverless platform like Netlify or Vercel. Render's free Web Service works with no code changes:
 
-1. Push this project to a GitHub repo, then in Railway: **New Project → Deploy from GitHub repo**.
-2. Add a **Volume** to the service (Railway dashboard → service → Settings → Volumes), mounted at `/data`.
-3. Set environment variables on the service (Settings → Variables): all the vars from `.env.example`, plus `DB_PATH=/data/linkedin-agent.db`, `LINKEDIN_REDIRECT_URI=https://<your-railway-domain>/auth/linkedin/callback`, and `APP_BASE_URL=https://<your-railway-domain>`.
-4. Railway sets `PORT` automatically; `server.js` already reads it.
-5. Deploy. Add the same `https://<your-railway-domain>/auth/linkedin/callback` as an authorized redirect URL in your LinkedIn Developer App.
-6. Open the Railway domain, connect LinkedIn, and Dumadot's dashboard loads as it does locally.
+1. Push this project to a GitHub repo.
+2. Render dashboard → **New → Web Service** → connect the repo.
+3. Environment: **Node**. Build command: `npm install`. Start command: `npm start`. Instance type: **Free**.
+4. Set environment variables (Settings → Environment): everything from `.env.example` except `PORT` (Render sets that automatically) and `DB_PATH` (leave unset — the free tier has no attachable persistent volume, so just use the default local file).
+5. Deploy. Render gives you a `https://<your-app>.onrender.com` domain.
+6. Add two more env vars using that domain: `APP_BASE_URL=https://<your-app>.onrender.com` and `LINKEDIN_REDIRECT_URI=https://<your-app>.onrender.com/auth/linkedin/callback`. Redeploy.
+7. In your LinkedIn Developer App, add `https://<your-app>.onrender.com/auth/linkedin/callback` as an authorized redirect URL.
+8. Open the Render URL and connect LinkedIn.
 
-Redeploys rebuild the container filesystem — only the mounted volume (`/data`) survives, which is why `DB_PATH` must point inside it.
+**Free-tier caveat:** the instance spins down after ~15 minutes with no traffic and its local disk is not guaranteed to survive a restart or redeploy — so `linkedin-agent.db` (posts, the LinkedIn token, settings) can be wiped when it wakes back up. Use the built-in `GET /api/export` endpoint to periodically back up your data as JSON. If that data loss becomes a real problem, move to a host with a persistent volume (Railway, Fly.io — both paid) or a free-forever VM (Oracle Cloud Always Free) and set `DB_PATH` to a path on that persistent storage, per the `DB_PATH` note above.
 
 ## Product architecture
 
