@@ -1,0 +1,6 @@
+.env
+linkedin-agent.db
+linkedin-agent.db-shm
+linkedin-agent.db-wal
+node_modules/
+.DS_Store

@@ -1,0 +1,8 @@
+{
+  "name":"dumadot",
+  "version":"2.0.0",
+  "private":true,
+  "type":"module",
+  "scripts":{"dev":"node --watch server.js","start":"node server.js"},
+  "dependencies":{"better-sqlite3":"^12.4.1","dotenv":"^17.2.2","express":"^5.1.0"}
+}
