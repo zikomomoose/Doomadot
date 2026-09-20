@@ -3,6 +3,9 @@ import express from "express";
 import pg from "pg";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { ensureBotTables, enqueueJob, startWorker, heartbeat } from "./lib/bots.js";
+
+const BOT_NAME = "dumadot";
 
 const { Pool } = pg;
 const app = express();
@@ -139,6 +142,8 @@ async function initDb() {
   await seedSetting("voice_instructions", "Human, sharp, practical, commercially aware. Use strong hooks, short paragraphs and specific observations. Avoid corporate fluff, fake statistics, generic motivation, excessive emojis and AI-sounding phrasing.");
   await seedSetting("planner_exclude", "CPS/CPL Publishers,CPS/CPL publisher acquisition,CPS,CPL publisher outreach");
   await seedSetting("planner_guidance", "");
+
+  await ensureBotTables(pool);
 }
 
 async function setting(key) { const row = await dbGet("SELECT value FROM settings WHERE key=?", [key]); return row?.value; }
@@ -514,7 +519,44 @@ app.delete("/api/voice/examples/:id",async(req,res)=>{await dbRun("DELETE FROM v
 
 app.post("/api/settings",async(req,res)=>{if(req.body.postTime)await updateSetting("post_time",req.body.postTime);if(typeof req.body.autoPublish==="boolean")await updateSetting("auto_publish",String(req.body.autoPublish));if(Array.isArray(req.body.pillars))await updateSetting("content_pillars",req.body.pillars.filter(p=>!isExcluded(p)).join(","));if(typeof req.body.researchEnabled==="boolean")await updateSetting("research_enabled",String(req.body.researchEnabled));res.json({ok:true,autoPublish:(await setting("auto_publish"))==="true",postTime:await setting("post_time"),pillars:await pillars()});});
 
+// Dotbots workforce coordination: shared job queue + registry + event log
+// (see lib/bots.js). Dumadot is the first bot wired to it, handling
+// generate_post/publish_post jobs that any other bot can enqueue.
+app.get("/api/bots/status",async(req,res)=>{
+  const bots=await dbAll("SELECT * FROM bot_registry ORDER BY name");
+  const events=await dbAll("SELECT * FROM bot_events ORDER BY id DESC LIMIT 50");
+  const jobCounts=await dbAll("SELECT bot_name, status, COUNT(*)::int as n FROM bot_jobs GROUP BY bot_name, status ORDER BY bot_name, status");
+  res.json({bots,events,jobCounts});
+});
+app.get("/api/bots/jobs",async(req,res)=>{
+  const conditions=[];const vals=[];
+  if(req.query.bot_name){conditions.push("bot_name=?");vals.push(req.query.bot_name);}
+  if(req.query.status){conditions.push("status=?");vals.push(req.query.status);}
+  const where=conditions.length?`WHERE ${conditions.join(" AND ")}`:"";
+  res.json(await dbAll(`SELECT * FROM bot_jobs ${where} ORDER BY id DESC LIMIT 100`, vals));
+});
+app.post("/api/bots/jobs",async(req,res)=>{
+  try{
+    const {botName,jobType,payload,nextJob}=req.body;
+    if(!botName||!jobType) return res.status(400).json({error:"botName and jobType are required."});
+    const job=await enqueueJob(pool,{botName,jobType,payload:payload||{},createdBy:"api",nextJob:nextJob||null});
+    res.json(job);
+  }catch(e){ res.status(500).json({error:e.message}); }
+});
+
 (async () => {
   await initDb();
+  startWorker(pool, BOT_NAME, {
+    generate_post: async (payload) => {
+      const draft = await createDraft(payload.topic||"", {format:payload.format||"",researchContext:payload.researchContext||"",targetDate:payload.targetDate||""});
+      return { postId: draft.id, topic: draft.topic, pillar: draft.pillar };
+    },
+    publish_post: async (payload) => {
+      if (!payload.postId) throw new Error("publish_post requires payload.postId");
+      const post = await publishPost(Number(payload.postId));
+      return { postId: post.id, status: post.status, linkedinPostId: post.linkedin_post_id };
+    },
+  });
+  await heartbeat(pool, BOT_NAME, "idle", { version: "2.2.0" });
   app.listen(PORT,()=>console.log(`Dumadot running at ${baseUrl()}`));
 })();

@@ -115,6 +115,27 @@ Core loop:
 
 Research → Plan → Write → Quality Check → Review → Schedule → Publish → Analyze → Learn
 
+## Dotbots workforce (multi-bot coordination)
+
+Dumadot is the first "Dotbot" wired to a shared job queue that lets multiple independent bots (each its own small process, potentially its own repo) coordinate through the same Postgres database instead of calling each other directly.
+
+`lib/bots.js` is self-contained on purpose — it only needs a `pg.Pool` — so it can be copied as-is into any future bot that points at the same `DATABASE_URL`:
+
+- `enqueueJob(pool, {botName, jobType, payload, nextJob})` — add a job for any bot to pick up.
+- `startWorker(pool, botName, handlers)` — polls `bot_jobs` for that bot's queued work using `FOR UPDATE SKIP LOCKED`, so multiple bots (or instances) never double-claim a job.
+- A completed job can carry `nextJob`, which the worker auto-enqueues on success — that's how a pipeline hands off across bots (e.g. a research-bot's finding becomes a job for Dumadot to write a post about) without a central orchestrator babysitting every step.
+- `heartbeat`/`bot_registry` and `logEvent`/`bot_events` give a shared, queryable view of what every bot is doing.
+
+Dumadot currently handles two job types: `generate_post` (wraps the existing draft pipeline) and `publish_post` (wraps publishing). Enqueue one from any other bot, or manually via:
+
+```bash
+curl -X POST https://<your-app>.onrender.com/api/bots/jobs \
+  -H "Content-Type: application/json" \
+  -d '{"botName":"dumadot","jobType":"generate_post","payload":{"topic":"..."}}'
+```
+
+`GET /api/bots/status` returns the registry, recent events, and per-bot job counts — a quick way to see the whole workforce's health from one endpoint.
+
 ## Troubleshooting
 
 If LinkedIn says credentials are missing, verify `.env` exists in the same folder as `server.js`.
