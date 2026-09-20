@@ -3,7 +3,9 @@ import express from "express";
 import pg from "pg";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import cookieParser from "cookie-parser";
 import { ensureBotTables, enqueueJob, startWorker, heartbeat } from "./lib/bots.js";
+import { ensureAuthTables, attachAuthRoutes, requireAuth } from "./lib/auth.js";
 
 const BOT_NAME = "dumadot";
 
@@ -12,13 +14,21 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const TIMEZONE = process.env.TIMEZONE || "Asia/Kolkata";
 app.use(express.json({ limit: "10mb" }));
-app.use(express.static("public"));
+app.use(cookieParser());
 fs.mkdirSync("public/uploads", { recursive: true });
 
 const dbUrl = process.env.DATABASE_URL || "";
 const isLocalDb = /localhost|127\.0\.0\.1/.test(dbUrl);
 const useSsl = !!dbUrl && !isLocalDb && process.env.PGSSLMODE !== "disable";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: useSsl ? { rejectUnauthorized: false } : false });
+
+// Auth routes (login/claim/logout/me) must be reachable before the gate;
+// everything registered after requireAuth - the dashboard's static files
+// included - requires a logged-in session.
+app.get("/api/health",(req,res)=>res.json({ok:true,app:"Dumadot",version:"2.2.0",time:new Date().toISOString()}));
+attachAuthRoutes(app, pool, { appName: "Dumadot" });
+app.use(requireAuth(pool));
+app.use(express.static("public"));
 
 function nowStamp() { return new Date().toISOString().slice(0, 19).replace("T", " "); }
 function toPg(sql) { let i = 0; return sql.replace(/\?/g, () => `$${++i}`); }
@@ -36,6 +46,7 @@ async function addColumn(table, column, type) {
 const safePillars = "Performance Marketing,AdTech,Affiliate Marketing,App Marketing & Growth,Industry Insights,Digirovers Insights";
 
 async function initDb() {
+  await ensureAuthTables(pool);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS posts (
@@ -421,7 +432,6 @@ app.get("/api/export",async(req,res)=>{
     voice_examples:await dbAll("SELECT * FROM voice_examples ORDER BY id")
   });
 });
-app.get("/api/health",(req,res)=>res.json({ok:true,app:"Dumadot",version:"2.2.0",time:new Date().toISOString()}));
 app.get("/api/status",async(req,res)=>{
   const token=await tokenRow();
   res.json({appName:"Dumadot",linkedinConnected:!!token,linkedinName:token?.name||null,postCount:Number((await dbGet("SELECT COUNT(*) n FROM posts")).n),autoPublish:(await setting("auto_publish"))==="true",postTime:await setting("post_time"),pillars:await pillars(),researchEnabled:(await setting("research_enabled"))==="true",researchLastRun:(await setting("research_last_run"))||null,plannerGuidance:(await setting("planner_guidance"))||""});
