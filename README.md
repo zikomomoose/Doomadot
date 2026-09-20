@@ -89,20 +89,23 @@ Dumadot stores all data (posts, plans, voice examples, research, settings, the L
 
 The ZIP does not include `.env`.
 
-## Deploying (Render, free tier)
+## Deploying (Render web service + Supabase Postgres, free)
 
-Dumadot is a stateful Node process (an in-memory `setInterval` scheduler for auto-publishing) backed by Postgres, so it needs a host that keeps a process running — not a static-site/serverless platform like Netlify or Vercel. Render's free Web Service plus free Postgres works with no further code changes:
+Dumadot is a stateful Node process (an in-memory `setInterval` scheduler for auto-publishing) backed by Postgres, so it needs a host that keeps a process running — not a static-site/serverless platform like Netlify or Vercel. The web service runs on Render's free tier; the database runs on Supabase's free tier instead of Render's own Postgres, because Render's free Postgres is deleted 30 days after creation while Supabase's free projects only pause after a week of inactivity (and Dumadot's own scheduler pings the database every 60 seconds, which tends to keep it from ever going inactive).
 
 1. Push this project to a GitHub repo.
-2. Render dashboard → **New → PostgreSQL**. Pick the free plan, same region you'll use for the web service. **Note:** Render's free Postgres expires 30 days after creation and gets deleted unless you upgrade it to a paid plan before then — put a reminder in your calendar, or export your data (`GET /api/export`) before it expires if you don't plan to upgrade.
-3. Render dashboard → **New → Web Service** → connect the repo. Environment: **Node**. Build command: `npm install`. Start command: `npm start`. Instance type: **Free**.
-4. On the web service's **Environment** tab, link the database — use Render's "Add from Database" / connect-a-database option and pick the Postgres instance from step 2, which injects `DATABASE_URL` automatically (use the *internal* connection string if both are in the same region — faster, and doesn't need SSL). Then add the rest of the vars from `.env.example` (`GEMINI_API_KEY`, `GEMINI_MODEL`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_VERSION`); leave `PORT` unset, Render sets it automatically.
-5. Deploy. Render gives you a `https://<your-app>.onrender.com` domain.
-6. Add two more env vars using that domain: `APP_BASE_URL=https://<your-app>.onrender.com` and `LINKEDIN_REDIRECT_URI=https://<your-app>.onrender.com/auth/linkedin/callback`. Redeploy.
-7. In your LinkedIn Developer App, add `https://<your-app>.onrender.com/auth/linkedin/callback` as an authorized redirect URL.
-8. Open the Render URL and connect LinkedIn.
+2. [supabase.com](https://supabase.com) → **New project**. Free plan, any region. Save the database password you set — you'll need it in the connection string.
+3. In the Supabase project → **Settings → Database → Connection string** (URI format). Copy it and fill in the password you set. This is your `DATABASE_URL` — it already requires SSL, which Dumadot handles automatically.
+4. Render dashboard → **New → Web Service** → connect the repo. Environment: **Node**. Build command: `npm install`. Start command: `npm start`. Instance type: **Free**.
+5. On the web service's **Environment** tab, add `DATABASE_URL` (the Supabase connection string from step 3), plus the rest of the vars from `.env.example` (`GEMINI_API_KEY`, `GEMINI_MODEL`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_VERSION`); leave `PORT` unset, Render sets it automatically.
+6. Deploy. Render gives you a `https://<your-app>.onrender.com` domain.
+7. Add two more env vars using that domain: `APP_BASE_URL=https://<your-app>.onrender.com` and `LINKEDIN_REDIRECT_URI=https://<your-app>.onrender.com/auth/linkedin/callback`. Redeploy.
+8. In your LinkedIn Developer App, add `https://<your-app>.onrender.com/auth/linkedin/callback` as an authorized redirect URL.
+9. Open the Render URL and connect LinkedIn.
 
-**Free-tier caveat that's now much smaller:** the web service instance still spins down after ~15 minutes with no traffic and boots a fresh container on the next request — but since all data now lives in Postgres, not the container's local disk, your LinkedIn connection, posts, and settings survive that restart. The one real free-tier limit left is the 30-day Postgres expiration noted above.
+If your Supabase project does pause from inactivity, opening it once in the Supabase dashboard resumes it — no data is lost while paused, just temporarily unreachable.
+
+**Remaining free-tier caveat:** the Render web service instance still spins down after ~15 minutes with no traffic and boots a fresh container on the next request — but since all data now lives in Supabase, not the container's local disk, your LinkedIn connection, posts, and settings survive that restart without any time limit on the database itself.
 
 ## Product architecture
 
