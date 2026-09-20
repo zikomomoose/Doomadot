@@ -12,7 +12,9 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.static("public"));
 fs.mkdirSync("public/uploads", { recursive: true });
 
-const useSsl = !!process.env.DATABASE_URL && (process.env.DATABASE_URL.includes("render.com") || process.env.PGSSLMODE === "require");
+const dbUrl = process.env.DATABASE_URL || "";
+const isLocalDb = /localhost|127\.0\.0\.1/.test(dbUrl);
+const useSsl = !!dbUrl && !isLocalDb && process.env.PGSSLMODE !== "disable";
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: useSsl ? { rejectUnauthorized: false } : false });
 
 function nowStamp() { return new Date().toISOString().slice(0, 19).replace("T", " "); }
