@@ -73,8 +73,22 @@ const PILLAR_SUGGESTIONS=["Performance Marketing","Paid Search (SEM)","Paid Soci
 const pages={dashboard:['Dashboard','Create. Schedule. Grow.'],calendar:['Content Calendar','Plan the next week without staring at an empty text box.'],ideas:['Idea Bank','Keep good thoughts before the algorithm eats them.'],drafts:['Drafts','Review, edit and approve.'],research:['Research','Current industry signals for better content.'],published:['Published','Everything Dumadot has sent to LinkedIn.'],analytics:['Analytics','Measure what actually happens after publishing.'],voice:['Voice & Brand','Teach Dumadot how you write.'],settings:['Settings','Control automation, research and content pillars.']};
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
 function toast(s){const t=document.getElementById('toast');t.textContent=s;t.style.display='block';setTimeout(()=>t.style.display='none',2600)}
-let dumaMountCounter=0;
-function dumaFaceSVG(){const gid='dumaGrad'+(dumaMountCounter++);return `<svg viewBox="0 0 100 100" class="duma-svg" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#36a3ff"/><stop offset="100%" stop-color="#1677ff"/></linearGradient></defs><circle cx="50" cy="50" r="47" fill="url(#${gid})"/><g class="duma-eyes-normal"><circle class="duma-eye" cx="35" cy="45" r="7" fill="#fff"/><circle class="duma-eye" cx="65" cy="45" r="7" fill="#fff"/></g><g class="duma-eyes-dizzy"><path d="M28 38 L42 52 M42 38 L28 52" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M58 38 L72 52 M72 38 L58 52" stroke="#fff" stroke-width="4" stroke-linecap="round"/></g><path class="duma-mouth mouth-idle" d="M36 65 Q50 71 64 65" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/><path class="duma-mouth mouth-overwhelmed" d="M32 66 Q40 58 48 66 Q56 74 64 66 Q68 62 70 64" stroke="#fff" stroke-width="4.5" fill="none" stroke-linecap="round"/><path class="duma-mouth mouth-happy" d="M32 60 Q50 80 68 60" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/><circle class="duma-sweat" cx="77" cy="32" r="4" fill="#cfe8ff"/></svg>`}
+function dumaFaceSVG(){return `<svg viewBox="0 0 100 100" class="duma-svg" xmlns="http://www.w3.org/2000/svg">
+  <path d="M18 24 Q33 2 50 9 Q67 2 82 24 Q73 11 50 10 Q27 11 18 24 Z" fill="#221d30"/>
+  <g transform="rotate(-25 12 30)"><rect x="9.5" y="18" width="5" height="20" rx="1.6" fill="#e8a33d"/><circle cx="12" cy="16" r="2.7" fill="#f0a9c2"/></g>
+  <rect x="14" y="20" width="72" height="68" rx="26" fill="#0b0d16" stroke="#e7ecfa" stroke-width="3"/>
+  <circle cx="88" cy="52" r="9" fill="#0b0d16" stroke="#e7ecfa" stroke-width="2.5"/>
+  <text x="88" y="56" font-size="9" font-weight="900" fill="#8ecbff" text-anchor="middle" font-family="Arial, sans-serif">D</text>
+  <rect x="23" y="43" width="25" height="21" rx="7" fill="none" stroke="#141414" stroke-width="3.5"/>
+  <rect x="52" y="43" width="25" height="21" rx="7" fill="none" stroke="#141414" stroke-width="3.5"/>
+  <line x1="48" y1="53" x2="52" y2="53" stroke="#141414" stroke-width="3.5"/>
+  <g class="duma-eyes-normal"><circle class="duma-eye" cx="35.5" cy="53.5" r="6" fill="#a9defc"/><circle class="duma-eye" cx="64.5" cy="53.5" r="6" fill="#a9defc"/></g>
+  <g class="duma-eyes-dizzy"><path d="M29 47 L42 59 M42 47 L29 59" stroke="#a9defc" stroke-width="3.5" stroke-linecap="round"/><path d="M58 47 L71 59 M71 47 L58 59" stroke="#a9defc" stroke-width="3.5" stroke-linecap="round"/></g>
+  <path class="duma-mouth mouth-idle" d="M38 71 Q50 77 62 71" stroke="#a9defc" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+  <path class="duma-mouth mouth-overwhelmed" d="M34 72 Q42 64 50 72 Q58 80 66 72" stroke="#a9defc" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path class="duma-mouth mouth-happy" d="M34 67 Q50 85 66 67" stroke="#a9defc" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+  <circle class="duma-sweat" cx="79" cy="34" r="4" fill="#bfe0ff"/>
+</svg>`}
 function mountDumaFaces(){document.querySelectorAll('[data-duma-mount]').forEach(el=>{if(!el.querySelector('svg'))el.innerHTML=dumaFaceSVG()})}
 function setDumaState(state){const el=document.getElementById('processingFace');if(el)el.setAttribute('data-duma-state',state)}
 let processingCount=0,processingTimer=null;
