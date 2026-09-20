@@ -142,14 +142,37 @@ function postMini(p){return `<div class="between" style="padding:11px 0;border-b
 function postCard(p,editable=true){return `<div class="card postcard"><div class="between"><div><strong>${esc(p.topic)}</strong><div class="tiny">${esc(p.pillar||'')} · ${esc(p.format||'')} · ${esc(p.created_at)}</div></div><span class="status ${esc(p.status)}">${esc(p.status)}</span></div><div class="posttext">${esc(p.content)}</div>${p.image_path?`<img src="${esc(p.image_path)}" style="max-width:100%;border-radius:10px;margin:6px 0;display:block">`:''}<div class="row"><span class="pill">Quality ${p.quality_score??'—'}/100</span>${p.scheduled_for?`<span class="pill">Scheduled ${esc(p.scheduled_for)}</span>`:''}${p.source_url?`<a class="link tiny" href="${esc(p.source_url)}" target="_blank">Source</a>`:''}</div><br><div class="row">${editable&&p.status!=='published'?`<button class="secondary" onclick="editPost(${p.id})">Edit</button><button class="secondary" onclick="approve(${p.id})">Approve</button>`:''}${p.status!=='published'?`<button onclick="publish(${p.id})">Publish</button>`:''}<button class="ghost" onclick="deletePost(${p.id})">Delete</button></div></div>`}
 function renderDrafts(){document.getElementById('draftsList').innerHTML=state.posts.filter(p=>p.status!=='published').map(p=>postCard(p)).join('')||'<div class="card muted">No drafts.</div>'}
 function renderPublished(){document.getElementById('publishedList').innerHTML=state.posts.filter(p=>p.status==='published').map(p=>postCard(p,false)).join('')||'<div class="card muted">Nothing published yet.</div>'}
-function renderCalendar(){const plans=window.plans||[];const evs=window.calendarEvents||[];const days=[];for(let i=0;i<7;i++){const d=new Date();d.setDate(d.getDate()+i);const key=d.toISOString().slice(0,10);const items=plans.filter(x=>x.plan_date===key);const dayEvents=evs.filter(x=>x.event_date===key);days.push(`<div class="day"><div class="dayhead">${d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}</div>${dayEvents.map(x=>`<div class="event" style="background:#fff2df"><b>${esc(x.name)}</b></div>`).join('')}${items.map(x=>`<div class="event"><b>${esc(x.topic)}</b><br><span>${esc(x.pillar)} · ${esc(x.format)}</span><br><button class="ghost" onclick="generatePlanItem(${x.id})">Generate</button></div>`).join('')||'<div class="tiny">No plan</div>'}</div>`)}document.getElementById('calendarGrid').innerHTML=days.join('')}
+function renderCalendar(){const plans=window.plans||[];const evs=window.calendarEvents||[];const days=[];for(let i=0;i<7;i++){const d=new Date();d.setDate(d.getDate()+i);const key=d.toISOString().slice(0,10);const items=plans.filter(x=>x.plan_date===key);const dayEvents=evs.filter(x=>x.event_date===key);days.push(`<div class="day"><div class="dayhead">${d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}</div>${dayEvents.map(x=>`<div class="event" style="background:#fff2df"><b>${esc(x.name)}</b></div>`).join('')}${items.map(planItemCard).join('')||'<div class="tiny">No plan</div>'}</div>`)}document.getElementById('calendarGrid').innerHTML=days.join('')}
+function planItemCard(x){
+  // Once a plan item has actually been turned into a post (status moves
+  // off 'idea'), generating again would create a second duplicate draft for
+  // the same calendar slot with zero warning - lock it by default. The
+  // checkbox is a deliberate, visible "yes I want to redo this one" step
+  // rather than a silent re-click.
+  const generated = x.status !== 'idea';
+  const unlocked = state.unlockedPlans && state.unlockedPlans.has(x.id);
+  const showButton = !generated || unlocked;
+  return `<div class="event">
+    <b>${esc(x.topic)}</b><br><span>${esc(x.pillar)} · ${esc(x.format)}</span>
+    ${generated?`<div class="tiny" style="color:var(--green);margin-top:4px;font-weight:700">✓ Draft generated</div>`:''}
+    <div class="row" style="margin-top:6px;align-items:center;gap:6px">
+      ${showButton?`<button class="ghost" onclick="generatePlanItem(${x.id})">${generated?'Regenerate':'Generate'}</button>`:''}
+      ${generated?`<label class="tiny" style="display:flex;align-items:center;gap:4px;cursor:pointer;margin:0"><input type="checkbox" style="width:auto;accent-color:var(--blue)" ${unlocked?'checked':''} onchange="togglePlanLock(${x.id},this.checked)">Unlock to regenerate</label>`:''}
+    </div>
+  </div>`;
+}
+function togglePlanLock(id,unlocked){
+  if(!state.unlockedPlans) state.unlockedPlans=new Set();
+  if(unlocked) state.unlockedPlans.add(id); else state.unlockedPlans.delete(id);
+  renderCalendar();
+}
 async function loadPlans(){window.plans=await api('/api/plans');renderCalendar()}
 async function loadCalendarEvents(){const from=new Date().toISOString().slice(0,10);const toD=new Date();toD.setDate(toD.getDate()+90);const to=toD.toISOString().slice(0,10);window.calendarEvents=await api('/api/calendar-events?from='+from+'&to='+to);renderCalendar();renderEventsList()}
 function renderEventsList(){const evs=window.calendarEvents||[];document.getElementById('eventsList').innerHTML=evs.map(e=>`<div class="between" style="padding:8px 0;border-bottom:1px solid var(--line)"><div><strong>${esc(e.event_date)}</strong> — ${esc(e.name)}${e.notes?` <span class="tiny muted">(${esc(e.notes)})</span>`:''}${e.recurring_yearly?' <span class="pill">yearly</span>':''}</div><button class="ghost" data-id="${e.id}" onclick="deleteCalendarEvent(this.dataset.id)">×</button></div>`).join('')||'<div class="muted tiny">No events yet. Fixed national holidays are pre-added; add festivals like Diwali or Ganesh Chaturthi yourself since their dates shift every year.</div>'}
 async function addCalendarEvent(){const event_date=document.getElementById('evDate').value;const name=document.getElementById('evName').value.trim();const notes=document.getElementById('evNotes').value.trim();const recurring_yearly=document.getElementById('evRecurring').checked;if(!event_date||!name)return toast('Date and name are required');try{await api('/api/calendar-events',{method:'POST',body:JSON.stringify({event_date,name,notes,recurring_yearly})});document.getElementById('evName').value='';document.getElementById('evNotes').value='';document.getElementById('evRecurring').checked=false;toast('Event added');await loadCalendarEvents()}catch(e){toast(e.message)}}
 async function deleteCalendarEvent(id){await api('/api/calendar-events/'+id,{method:'DELETE'});await loadCalendarEvents()}
 async function generatePlan(){try{const guidance=document.getElementById('plannerGuidance').value.trim();await api('/api/research/refresh',{method:'POST'});const y=await api('/api/plans/generate',{method:'POST',body:JSON.stringify({guidance})});toast(`Plan created: ${y.items.length} items`);await loadPlans()}catch(e){toast(e.message)}}
-async function generatePlanItem(id){try{await api('/api/plans/'+id+'/generate',{method:'POST'});toast('Draft generated');await load();showPage('drafts')}catch(e){toast(e.message)}}
+async function generatePlanItem(id){try{await api('/api/plans/'+id+'/generate',{method:'POST'});if(state.unlockedPlans)state.unlockedPlans.delete(id);toast('Draft generated - see it in Drafts');await load();await loadPlans()}catch(e){toast(e.message)}}
 function renderRecommendation(){
   const el=document.getElementById('recommendation');
   const btn=document.getElementById('recommendBtn');
