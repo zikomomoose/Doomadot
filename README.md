@@ -19,7 +19,7 @@ Dumadot is a local-first LinkedIn content agent that researches industry topics,
 - LinkedIn OAuth + publishing
 - Published-post history
 - Analytics and manual metric capture
-- SQLite persistence and v1 migration support
+- PostgreSQL persistence (survives restarts/redeploys, unlike a web service's local disk)
 - Gemini 3.5 Flash-Lite support
 - Master Auto-publish toggle
 - Hard exclusion of CPS/CPL topics from automatic planning
@@ -37,7 +37,7 @@ Automatic content planning has a server-side hard block for CPS/CPL topics. Thos
 
 1. Extract the ZIP.
 2. Open Terminal in the extracted folder.
-3. Copy your existing `.env` from the previous Dumadot installation into this folder. Do not share it publicly.
+3. Copy your existing `.env` from the previous Dumadot installation into this folder. Do not share it publicly. You'll need a Postgres database — see `DATABASE_URL` below.
 4. Run:
 
 ```bash
@@ -63,7 +63,11 @@ LINKEDIN_CLIENT_ID=your_linkedin_client_id
 LINKEDIN_CLIENT_SECRET=your_linkedin_client_secret
 LINKEDIN_REDIRECT_URI=http://localhost:3000/auth/linkedin/callback
 LINKEDIN_VERSION=202603
+
+DATABASE_URL=postgresql://user:password@host:5432/dbname
 ```
+
+`DATABASE_URL` is a standard Postgres connection string. For local development, point it at any Postgres instance (e.g. `docker run -e POSTGRES_PASSWORD=devpass -p 5432:5432 postgres:17`, then `DATABASE_URL=postgresql://postgres:devpass@localhost:5432/postgres`). The schema is created automatically on first boot.
 
 Optional:
 
@@ -73,10 +77,7 @@ TIMEZONE=Asia/Kolkata
 AUTO_PUBLISH=false
 CONTENT_PILLARS=Performance Marketing,AdTech,Affiliate Marketing,App Marketing & Growth,Industry Insights,Digirovers Insights
 PORT=3000
-DB_PATH=linkedin-agent.db
 ```
-
-`DB_PATH` overrides where the SQLite file is written/read. Leave it unset for local use; set it to a mounted volume path (e.g. `/data/linkedin-agent.db`) when deploying to a host with persistent storage.
 
 ## LinkedIn app configuration
 
@@ -84,24 +85,24 @@ Your LinkedIn Developer App must have the required products/scopes for Sign In w
 
 ## Data
 
-Dumadot stores local data in `linkedin-agent.db` (or `DB_PATH` if set). Do not delete it if you want to preserve posts, plans, voice examples, research and settings.
+Dumadot stores all data (posts, plans, voice examples, research, settings, the LinkedIn token) in the Postgres database at `DATABASE_URL`. The database, not the web process, is what needs to survive — the app itself can restart, redeploy, or move hosts freely without losing anything, as long as it points at the same database.
 
-The ZIP does not include `.env` or `linkedin-agent.db`.
+The ZIP does not include `.env`.
 
 ## Deploying (Render, free tier)
 
-Dumadot is a stateful Node process (SQLite file + an in-memory `setInterval` scheduler for auto-publishing), so it needs a host that keeps a process running — not a static-site/serverless platform like Netlify or Vercel. Render's free Web Service works with no code changes:
+Dumadot is a stateful Node process (an in-memory `setInterval` scheduler for auto-publishing) backed by Postgres, so it needs a host that keeps a process running — not a static-site/serverless platform like Netlify or Vercel. Render's free Web Service plus free Postgres works with no further code changes:
 
 1. Push this project to a GitHub repo.
-2. Render dashboard → **New → Web Service** → connect the repo.
-3. Environment: **Node**. Build command: `npm install`. Start command: `npm start`. Instance type: **Free**.
-4. Set environment variables (Settings → Environment): everything from `.env.example` except `PORT` (Render sets that automatically) and `DB_PATH` (leave unset — the free tier has no attachable persistent volume, so just use the default local file).
+2. Render dashboard → **New → PostgreSQL**. Pick the free plan, same region you'll use for the web service. **Note:** Render's free Postgres expires 30 days after creation and gets deleted unless you upgrade it to a paid plan before then — put a reminder in your calendar, or export your data (`GET /api/export`) before it expires if you don't plan to upgrade.
+3. Render dashboard → **New → Web Service** → connect the repo. Environment: **Node**. Build command: `npm install`. Start command: `npm start`. Instance type: **Free**.
+4. On the web service's **Environment** tab, link the database — use Render's "Add from Database" / connect-a-database option and pick the Postgres instance from step 2, which injects `DATABASE_URL` automatically (use the *internal* connection string if both are in the same region — faster, and doesn't need SSL). Then add the rest of the vars from `.env.example` (`GEMINI_API_KEY`, `GEMINI_MODEL`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_VERSION`); leave `PORT` unset, Render sets it automatically.
 5. Deploy. Render gives you a `https://<your-app>.onrender.com` domain.
 6. Add two more env vars using that domain: `APP_BASE_URL=https://<your-app>.onrender.com` and `LINKEDIN_REDIRECT_URI=https://<your-app>.onrender.com/auth/linkedin/callback`. Redeploy.
 7. In your LinkedIn Developer App, add `https://<your-app>.onrender.com/auth/linkedin/callback` as an authorized redirect URL.
 8. Open the Render URL and connect LinkedIn.
 
-**Free-tier caveat:** the instance spins down after ~15 minutes with no traffic and its local disk is not guaranteed to survive a restart or redeploy — so `linkedin-agent.db` (posts, the LinkedIn token, settings) can be wiped when it wakes back up. Use the built-in `GET /api/export` endpoint to periodically back up your data as JSON. If that data loss becomes a real problem, move to a host with a persistent volume (Railway, Fly.io — both paid) or a free-forever VM (Oracle Cloud Always Free) and set `DB_PATH` to a path on that persistent storage, per the `DB_PATH` note above.
+**Free-tier caveat that's now much smaller:** the web service instance still spins down after ~15 minutes with no traffic and boots a fresh container on the next request — but since all data now lives in Postgres, not the container's local disk, your LinkedIn connection, posts, and settings survive that restart. The one real free-tier limit left is the 30-day Postgres expiration noted above.
 
 ## Product architecture
 
@@ -114,6 +115,8 @@ Research → Plan → Write → Quality Check → Review → Schedule → Publis
 ## Troubleshooting
 
 If LinkedIn says credentials are missing, verify `.env` exists in the same folder as `server.js`.
+
+If the app fails to start with a connection error, verify `DATABASE_URL` is set and reachable — on Render, make sure the web service and the Postgres instance are linked (see Deploying above) and both show as running.
 
 If Gemini returns a model error, verify:
 
