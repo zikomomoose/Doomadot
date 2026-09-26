@@ -29,7 +29,10 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: useSsl 
 app.get("/api/health",(req,res)=>res.json({ok:true,app:"Dumadot",version:"3.0.0",time:new Date().toISOString()}));
 attachAuthRoutes(app, pool, { appName: "Dumadot" });
 app.use(requireAuth(pool));
-app.use(express.static("public"));
+// no-cache (not no-store) on the HTML shell: the browser still revalidates
+// via ETag and gets a fast 304 when nothing changed, but a real deploy is
+// never masked by a stale cached copy of the dashboard.
+app.use(express.static("public", { setHeaders: (res, filePath) => { if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-cache"); } }));
 
 function nowStamp() { return new Date().toISOString().slice(0, 19).replace("T", " "); }
 function toPg(sql) { let i = 0; return sql.replace(/\?/g, () => `$${++i}`); }
